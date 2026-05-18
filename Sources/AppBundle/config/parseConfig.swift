@@ -21,7 +21,11 @@ func readConfig(forceConfigUrl: URL? = nil) -> Result<(Config, URL), String> {
                 return .failure(msg)
         }
     }
-    let (parsedConfig, errors) = (try? String(contentsOf: configUrl, encoding: .utf8)).map { parseConfig($0) } ?? (defaultConfig, [])
+    let content: String? = try? String(contentsOf: configUrl, encoding: .utf8)
+    if content == nil && configUrl != defaultConfigUrl {
+        return .failure("Failed to read custom config file at \(configUrl.absoluteURL.path)")
+    }
+    let (parsedConfig, errors) = content.map { parseConfig($0) } ?? (defaultConfig, [])
 
     if errors.isEmpty {
         return .success((parsedConfig, configUrl))

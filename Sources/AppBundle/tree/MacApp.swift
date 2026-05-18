@@ -85,6 +85,9 @@ final class MacApp: AbstractApp {
 
     func closeAndUnregisterAxWindow(_ windowId: UInt32) {
         if serverArgs.isReadOnly { return }
+        Task { @MainActor in
+            WindowAnimator.shared.cancelAnimation(for: windowId)
+        }
         setFrameJobs.removeValue(forKey: windowId)?.cancel()
         _ = withWindowAsync(windowId) { [windows] window, job in
             guard let closeButton = window.get(Ax.closeButtonAttr) else { return }
@@ -131,7 +134,7 @@ final class MacApp: AbstractApp {
         }
     }
 
-    func setAxFrame(_ windowId: UInt32, _ topLeft: CGPoint?, _ size: CGSize?) {
+    @MainActor func setAxFrameInstant(_ windowId: UInt32, _ topLeft: CGPoint?, _ size: CGSize?) {
         setFrameJobs.removeValue(forKey: windowId)?.cancel()
         setFrameJobs[windowId] = withWindowAsync(windowId) { [axApp] window, job in
             try disableAnimations(app: axApp.threadGuarded, job) {
@@ -140,7 +143,19 @@ final class MacApp: AbstractApp {
         }
     }
 
+    @MainActor func setAxFrame(_ windowId: UInt32, _ topLeft: CGPoint?, _ size: CGSize?) {
+        if isStartup || windowId == currentlyManipulatedWithMouseWindowId {
+            WindowAnimator.shared.cancelAnimation(for: windowId)
+            setAxFrameInstant(windowId, topLeft, size)
+            return
+        }
+        WindowAnimator.shared.animate(windowId: windowId, app: self, targetTopLeft: topLeft, targetSize: size)
+    }
+
     func setAxFrameBlocking(_ windowId: UInt32, _ topLeft: CGPoint?, _ size: CGSize?) async throws {
+        await MainActor.run {
+            WindowAnimator.shared.cancelAnimation(for: windowId)
+        }
         setFrameJobs.removeValue(forKey: windowId)?.cancel()
         try await withWindow(windowId) { [axApp] window, job in
             try disableAnimations(app: axApp.threadGuarded, job) {
@@ -295,6 +310,9 @@ final class MacApp: AbstractApp {
         windowsCount = alive.count
         for windowId in dead {
             setFrameJobs.removeValue(forKey: windowId)?.cancel()
+            Task { @MainActor in
+                WindowAnimator.shared.cancelAnimation(for: windowId)
+            }
         }
         return alive
     }
