@@ -101,6 +101,9 @@ final class MacApp: AbstractApp {
 
     func closeAndUnregisterAxWindow(_ windowId: UInt32) {
         if serverArgs.isReadOnly { return }
+        Task { @MainActor in
+            WindowAnimator.shared.cancelAnimation(for: windowId)
+        }
         setFrameJobs.removeValue(forKey: windowId)?.cancel()
         _ = withWindowAsync(windowId, .cancellable) { [windows] window, job in
             guard let closeButton = window.get(Ax.closeButtonAttr) else { return }
@@ -147,7 +150,7 @@ final class MacApp: AbstractApp {
         }
     }
 
-    func setAxFrame(_ windowId: UInt32, _ topLeft: CGPoint?, _ size: CGSize?) {
+    @MainActor func setAxFrameInstant(_ windowId: UInt32, _ topLeft: CGPoint?, _ size: CGSize?) {
         setFrameJobs.removeValue(forKey: windowId)?.cancel()
         setFrameJobs[windowId] = withWindowAsync(windowId, .cancellable) { [axApp] window, job in
             try disableAnimations(app: axApp.threadGuarded, job) {
@@ -157,6 +160,7 @@ final class MacApp: AbstractApp {
     }
 
     func setAxFrameForTermination(_ windowId: UInt32, _ topLeft: CGPoint?, _ size: CGSize?) {
+        WindowAnimator.shared.cancelAnimation(for: windowId)
         setFrameJobs.removeValue(forKey: windowId)?.cancel()
         let semaphore = DispatchSemaphore(value: 0)
         let job = withWindowAsync(windowId, .nonCancellable) { [axApp] window, job in
@@ -169,6 +173,15 @@ final class MacApp: AbstractApp {
             case true: return
             case false: semaphore.wait()
         }
+    }
+
+    @MainActor func setAxFrame(_ windowId: UInt32, _ topLeft: CGPoint?, _ size: CGSize?) {
+        if isStartup || windowId == currentlyManipulatedWithMouseWindowId {
+            WindowAnimator.shared.cancelAnimation(for: windowId)
+            setAxFrameInstant(windowId, topLeft, size)
+            return
+        }
+        WindowAnimator.shared.animate(windowId: windowId, app: self, targetTopLeft: topLeft, targetSize: size)
     }
 
     func getAxWindowsCount(_ cm: CancellationMode) async throws -> Int? {
@@ -326,6 +339,9 @@ final class MacApp: AbstractApp {
         windowsCount = alive.count
         for windowId in dead {
             setFrameJobs.removeValue(forKey: windowId)?.cancel()
+            Task { @MainActor in
+                WindowAnimator.shared.cancelAnimation(for: windowId)
+            }
         }
         return alive
     }

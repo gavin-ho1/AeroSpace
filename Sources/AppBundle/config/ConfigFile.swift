@@ -10,10 +10,17 @@ func findCustomConfigUrl() -> ConfigFile {
         case nil:
             [
                 FileManager.default.homeDirectoryForCurrentUser.appending(path: configDotfileName),
+                FileManager.default.homeDirectoryForCurrentUser.appending(path: ".config/aerospace/aerospace.toml"),
                 xdgConfigHome.appending(path: "aerospace").appending(path: "aerospace.toml"),
             ]
     }
-    let existingCandidates: [URL] = candidates.filter { (candidate: URL) in FileManager.default.fileExists(atPath: candidate.path) }
+    var uniqueCandidates: [URL] = []
+    for candidate in candidates {
+        if !uniqueCandidates.contains(candidate) {
+            uniqueCandidates.append(candidate)
+        }
+    }
+    let existingCandidates: [URL] = uniqueCandidates.filter { (candidate: URL) in FileManager.default.fileExists(atPath: candidate.path) }
     let count = existingCandidates.count
     return switch count {
         case 0: .noCustomConfigExists
