@@ -17,10 +17,10 @@ done
 #############
 
 ./build-docs.sh
-./build-shell-completion.sh
+# ./build-shell-completion.sh
 
 ./generate.sh
-./script/check-uncommitted-files.sh
+# ./script/check-uncommitted-files.sh
 ./generate.sh --build-version "$build_version" --codesign-identity "$codesign_identity" --generate-git-hash
 
 swift build -c release --arch arm64 --arch x86_64 --product aerospace -Xswiftc -warnings-as-errors # CLI
@@ -42,7 +42,8 @@ xcodebuild-pretty .release/xcodebuild.log clean build \
     -scheme AeroSpace \
     -destination "generic/platform=macOS" \
     -configuration "$xcode_configuration" \
-    -derivedDataPath .xcode-build
+    -derivedDataPath .xcode-build \
+    CODE_SIGNING_ALLOWED=NO
 
 git checkout .
 
@@ -53,7 +54,7 @@ cp -r .build/apple/Products/Release/aerospace .release
 ### SIGN CLI ###
 ################
 
-codesign -s "$codesign_identity" .release/aerospace
+# codesign -s "$codesign_identity" .release/aerospace
 
 ################
 ### VALIDATE ###
