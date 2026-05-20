@@ -152,6 +152,8 @@ enum OptimalHideCorner {
     case bottomLeftCorner, bottomRightCorner
 }
 
+@MainActor private var lastActiveWorkspacePerMonitor: [CGPoint: String] = [:]
+
 @MainActor
 private func layoutWorkspaces() async throws {
     if !TrayMenuModel.shared.isEnabled {
@@ -187,6 +189,36 @@ private func layoutWorkspaces() async throws {
         monitorToOptimalHideCorner[monitor.rect.topLeftCorner] = corner
     }
 
+    // Detect workspace transitions for slide animation
+    var transitions: [(monitor: Monitor, oldWs: Workspace, newWs: Workspace, direction: SlideDirection)] = []
+    for monitor in monitors {
+        let newWs = monitor.activeWorkspace
+        if let oldWsName = lastActiveWorkspacePerMonitor[monitor.rect.topLeftCorner] {
+            let oldWs = Workspace.get(byName: oldWsName)
+            if oldWs != newWs {
+                let direction: SlideDirection = newWs > oldWs ? .left : .right
+                transitions.append((monitor, oldWs, newWs, direction))
+            }
+        }
+        lastActiveWorkspacePerMonitor[monitor.rect.topLeftCorner] = newWs.name
+    }
+
+    // Set up slide-out animation for old workspace windows
+    for (_, oldWs, _, direction) in transitions {
+        for window in oldWs.allLeafWindowsRecursive {
+            guard let macWindow = window as? MacWindow, !macWindow.isFloating else { continue }
+            try await macWindow.slideOffScreen(direction: direction)
+        }
+    }
+
+    // Set up slide-in starting positions for new workspace windows
+    for (_, _, newWs, direction) in transitions {
+        for window in newWs.allLeafWindowsRecursive {
+            guard let macWindow = window as? MacWindow, !macWindow.isFloating else { continue }
+            try await macWindow.positionForSlideIn(direction: direction)
+        }
+    }
+
     // to reduce flicker, first unhide visible workspaces, then hide invisible ones
     for monitor in monitors {
         let workspace = monitor.activeWorkspace
@@ -194,6 +226,8 @@ private func layoutWorkspaces() async throws {
         try await workspace.layoutWorkspace()
     }
     for workspace in Workspace.all where !workspace.isVisible {
+        // Skip old workspace windows that were already animated off-screen
+        if transitions.contains(where: { $0.oldWs == workspace }) { continue }
         let corner = monitorToOptimalHideCorner[workspace.workspaceMonitor.rect.topLeftCorner] ?? .bottomRightCorner
         for window in workspace.allLeafWindowsRecursive {
             try await (window as! MacWindow).hideInCorner(corner) // todo as!

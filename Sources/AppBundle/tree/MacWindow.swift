@@ -196,6 +196,39 @@ final class MacWindow: Window {
     override func getAxRect() async throws -> Rect? {
         try await macApp.getAxRect(windowId)
     }
+
+    @MainActor
+    func slideOffScreen(direction: SlideDirection) async throws {
+        guard let nodeMonitor else { return }
+        if !isHiddenInCorner {
+            guard let windowRect = try await getAxRect() else { return }
+            if !isHiddenInCorner {
+                let topLeftCorner = windowRect.topLeftCorner
+                let monitorRect = windowRect.center.monitorApproximation.rect
+                let absolutePoint = topLeftCorner - monitorRect.topLeftCorner
+                prevUnhiddenProportionalPositionInsideWorkspaceRect =
+                    CGPoint(x: absolutePoint.x / monitorRect.width, y: absolutePoint.y / monitorRect.height)
+            }
+        }
+        guard let windowRect = try await getAxRect() else { return }
+        let offScreen = slideOutPosition(for: windowRect, monitor: nodeMonitor, direction: direction)
+        setAxFrame(offScreen, nil)
+    }
+
+    @MainActor
+    func positionForSlideIn(direction: SlideDirection) async throws {
+        guard let nodeMonitor else { return }
+        let windowRect: Rect
+        if let lastRect = lastAppliedLayoutPhysicalRect {
+            windowRect = lastRect
+        } else if let axRect = try await getAxRect() {
+            windowRect = axRect
+        } else {
+            return
+        }
+        let startPos = slideInStartPosition(for: windowRect, monitor: nodeMonitor, direction: direction)
+        try await setAxFrameBlocking(startPos, nil)
+    }
 }
 
 extension Window {
