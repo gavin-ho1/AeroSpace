@@ -184,6 +184,18 @@ final class MacApp: AbstractApp {
         WindowAnimator.shared.animate(windowId: windowId, app: self, targetTopLeft: topLeft, targetSize: size)
     }
 
+    func setAxFrameBlocking(_ windowId: UInt32, _ topLeft: CGPoint?, _ size: CGSize?) async throws {
+        await MainActor.run {
+            WindowAnimator.shared.cancelAnimation(for: windowId)
+        }
+        setFrameJobs.removeValue(forKey: windowId)?.cancel()
+        try await withWindow(windowId, .cancellable) { [axApp] window, job in
+            try disableAnimations(app: axApp.threadGuarded, job) {
+                try setFrame(window, topLeft, size, job)
+            }
+        }
+    }
+
     func getAxWindowsCount(_ cm: CancellationMode) async throws -> Int? {
         try await thread?.runInLoop(cm) { [axApp] job in
             axApp.threadGuarded.get(Ax.windowsAttr)?.count

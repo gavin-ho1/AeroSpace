@@ -122,13 +122,27 @@ final class MacWindow: Window {
     @MainActor
     func hideInCorner(_ corner: OptimalHideCorner) async throws {
         guard let nodeMonitor else { return }
-        // Don't accidentally override prevUnhiddenEmulationPosition in case of subsequent `hideInCorner` calls
+        try await saveUnhiddenPositionIfNeeded()
+        guard let p = try await cornerPosition(corner, monitor: nodeMonitor) else { return }
+        setAxFrame(p, nil)
+    }
+
+    @MainActor
+    func hideInCornerBlocking(_ corner: OptimalHideCorner) async throws {
+        guard let nodeMonitor else { return }
+        try await saveUnhiddenPositionIfNeeded()
+        guard let p = try await cornerPosition(corner, monitor: nodeMonitor) else { return }
+        try await setAxFrameBlocking(p, nil)
+    }
+
+    @MainActor
+    private func saveUnhiddenPositionIfNeeded() async throws {
         if !isHiddenInCorner {
             guard let windowRect = try await getAxRect(.cancellable) else { return }
             // Check for isHiddenInCorner for the second time because of the suspension point above
             if !isHiddenInCorner {
                 let topLeftCorner = windowRect.topLeftCorner
-                let monitorRect = windowRect.center.monitorApproximation.rect // Similar to layoutFloatingWindow. Non idempotent
+                let monitorRect = windowRect.center.monitorApproximation.rect
                 let absolutePoint = topLeftCorner - monitorRect.topLeftCorner
                 prevUnhiddenProportionalPositionInsideWorkspaceRect =
                     CGPoint(x: absolutePoint.x / monitorRect.width, y: absolutePoint.y / monitorRect.height)
@@ -137,21 +151,21 @@ final class MacWindow: Window {
                 }
             }
         }
-        let p: CGPoint
+    }
+
+    @MainActor
+    private func cornerPosition(_ corner: OptimalHideCorner, monitor: Monitor) async throws -> CGPoint? {
         switch corner {
             case .bottomLeftCorner:
                 guard let s = try await getAxSize(.cancellable) else { fallthrough }
                 // Zoom will jump off if you do one pixel offset https://github.com/nikitabobko/AeroSpace/issues/527
                 // todo this ad hoc won't be necessary once I implement optimization suggested by Zalim
                 let onePixelOffset = macApp.appId == .zoom ? .zero : CGPoint(x: 1, y: -1)
-                p = nodeMonitor.visibleRect.bottomLeftCorner + onePixelOffset + CGPoint(x: -s.width, y: 0)
+                return monitor.visibleRect.bottomLeftCorner + onePixelOffset + CGPoint(x: -s.width, y: 0)
             case .bottomRightCorner:
-                // Zoom will jump off if you do one pixel offset https://github.com/nikitabobko/AeroSpace/issues/527
-                // todo this ad hoc won't be necessary once I implement optimization suggested by Zalim
                 let onePixelOffset = macApp.appId == .zoom ? .zero : CGPoint(x: 1, y: 1)
-                p = nodeMonitor.visibleRect.bottomRightCorner - onePixelOffset
+                return monitor.visibleRect.bottomRightCorner - onePixelOffset
         }
-        setAxFrame(p, nil)
     }
 
     @MainActor
@@ -194,6 +208,10 @@ final class MacWindow: Window {
         macApp.setAxFrame(windowId, topLeft, size)
     }
 
+    func setAxFrameBlocking(_ topLeft: CGPoint?, _ size: CGSize?) async throws {
+        try await macApp.setAxFrameBlocking(windowId, topLeft, size)
+    }
+
     override func getAxRect(_ cm: CancellationMode) async throws -> Rect? {
         try await macApp.getAxRect(windowId, cm)
     }
@@ -202,7 +220,7 @@ final class MacWindow: Window {
     func slideOffScreen(direction: SlideDirection) async throws {
         guard let nodeMonitor else { return }
         if !isHiddenInCorner {
-            guard let windowRect = try await getAxRect() else { return }
+            guard let windowRect = try await getAxRect(.cancellable) else { return }
             if !isHiddenInCorner {
                 let topLeftCorner = windowRect.topLeftCorner
                 let monitorRect = windowRect.center.monitorApproximation.rect
@@ -211,8 +229,19 @@ final class MacWindow: Window {
                     CGPoint(x: absolutePoint.x / monitorRect.width, y: absolutePoint.y / monitorRect.height)
             }
         }
-        guard let windowRect = try await getAxRect() else { return }
+        let windowRect: Rect
+        if let lastRect = lastAppliedLayoutPhysicalRect {
+            windowRect = lastRect
+        } else if let axRect = try await getAxRect(.cancellable) {
+            windowRect = axRect
+        } else {
+            return
+        }
         let offScreen = slideOutPosition(for: windowRect, monitor: nodeMonitor, direction: direction)
+        if isHiddenInCorner, let lastRect = lastAppliedLayoutPhysicalRect {
+            unhideFromCorner()
+            try await setAxFrameBlocking(lastRect.topLeftCorner, lastRect.size)
+        }
         setAxFrame(offScreen, nil)
     }
 
@@ -222,7 +251,7 @@ final class MacWindow: Window {
         let windowRect: Rect
         if let lastRect = lastAppliedLayoutPhysicalRect {
             windowRect = lastRect
-        } else if let axRect = try await getAxRect() {
+        } else if let axRect = try await getAxRect(.cancellable) {
             windowRect = axRect
         } else {
             return
