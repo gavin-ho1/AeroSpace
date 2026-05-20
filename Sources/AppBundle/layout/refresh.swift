@@ -214,7 +214,7 @@ private func layoutWorkspaces() async throws {
     // Set up slide-out animation for old workspace windows
     for (_, oldWs, _, direction) in transitions {
         for window in oldWs.allLeafWindowsRecursive {
-            guard let macWindow = window as? MacWindow, !macWindow.isFloating else { continue }
+            guard let macWindow = window as? MacWindow, macWindow.supportsSlideAnimation else { continue }
             try await macWindow.slideOffScreen(direction: direction)
         }
     }
@@ -222,7 +222,7 @@ private func layoutWorkspaces() async throws {
     // Set up slide-in starting positions for new workspace windows
     for (_, _, newWs, direction) in transitions {
         for window in newWs.allLeafWindowsRecursive {
-            guard let macWindow = window as? MacWindow, !macWindow.isFloating else { continue }
+            guard let macWindow = window as? MacWindow, macWindow.supportsSlideAnimation else { continue }
             try await macWindow.positionForSlideIn(direction: direction)
         }
     }

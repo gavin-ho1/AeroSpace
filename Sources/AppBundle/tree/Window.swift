@@ -61,6 +61,15 @@ extension Window {
         }
     }
 
+    @MainActor
+    var supportsSlideAnimation: Bool {
+        guard let parent else { return false }
+        switch getChildParentRelation(child: self, parent: parent) {
+        case .tiling, .floatingWindow: return true
+        default: return false
+        }
+    }
+
     @discardableResult
     @MainActor
     func bindAsFloatingWindow(to workspace: Workspace) -> BindingData? {

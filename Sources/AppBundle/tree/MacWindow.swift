@@ -232,6 +232,14 @@ final class MacWindow: Window {
         let windowRect: Rect
         if let lastRect = lastAppliedLayoutPhysicalRect {
             windowRect = lastRect
+        } else if isHiddenInCorner, let savedPos = prevUnhiddenProportionalPositionInsideWorkspaceRect {
+            let monitorRect = nodeMonitor.visibleRect
+            let savedX = monitorRect.topLeftX + monitorRect.width * savedPos.x
+            let savedY = monitorRect.topLeftY + monitorRect.height * savedPos.y
+            let size = try? await getAxSize(.cancellable)
+            let w = size?.width ?? lastFloatingSize?.width ?? 0
+            let h = size?.height ?? lastFloatingSize?.height ?? 0
+            windowRect = Rect(topLeftX: savedX, topLeftY: savedY, width: w, height: h)
         } else if let axRect = try await getAxRect(.cancellable) {
             windowRect = axRect
         } else {
@@ -251,7 +259,21 @@ final class MacWindow: Window {
         let windowRect: Rect
         if let lastRect = lastAppliedLayoutPhysicalRect {
             windowRect = lastRect
+        } else if isHiddenInCorner, let savedPos = prevUnhiddenProportionalPositionInsideWorkspaceRect {
+            let monitorRect = nodeMonitor.visibleRect
+            let savedX = monitorRect.topLeftX + monitorRect.width * savedPos.x
+            let savedY = monitorRect.topLeftY + monitorRect.height * savedPos.y
+            let size = try? await getAxSize(.cancellable)
+            let w = size?.width ?? lastFloatingSize?.width ?? 0
+            let h = size?.height ?? lastFloatingSize?.height ?? 0
+            windowRect = Rect(topLeftX: savedX, topLeftY: savedY, width: w, height: h)
         } else if let axRect = try await getAxRect(.cancellable) {
+            if !isHiddenInCorner {
+                let monitorRect = nodeMonitor.visibleRect
+                let absolutePoint = axRect.topLeftCorner - monitorRect.topLeftCorner
+                prevUnhiddenProportionalPositionInsideWorkspaceRect =
+                    CGPoint(x: absolutePoint.x / monitorRect.width, y: absolutePoint.y / monitorRect.height)
+            }
             windowRect = axRect
         } else {
             return
