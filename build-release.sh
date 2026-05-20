@@ -47,7 +47,7 @@ cd ./xcode
         CODE_SIGNING_ALLOWED=NO
 cd -
 
-git checkout .
+# git checkout .
 
 cp -r "xcode/.xcode-build/Build/Products/$xcode_configuration/AeroSpace.app" .release
 cp -r .build/apple/Products/Release/aerospace .release
