@@ -153,6 +153,10 @@ enum OptimalHideCorner {
 }
 
 @MainActor private var lastActiveWorkspacePerMonitor: [CGPoint: String] = [:]
+/// Workspaces whose windows have been animated off-screen during a transition.
+/// Persists between the first and second `layoutWorkspaces()` calls to prevent
+/// `hideInCorner` from overriding the slide animation in the second call.
+@MainActor private var transitionedWorkspaceNames: Set<String> = []
 
 @MainActor
 private func layoutWorkspaces() async throws {
@@ -192,12 +196,16 @@ private func layoutWorkspaces() async throws {
     // Detect workspace transitions for slide animation
     var transitions: [(monitor: Monitor, oldWs: Workspace, newWs: Workspace, direction: SlideDirection)] = []
     for monitor in monitors {
+        if lastActiveWorkspacePerMonitor[monitor.rect.topLeftCorner] == nil {
+            lastActiveWorkspacePerMonitor[monitor.rect.topLeftCorner] = monitor.activeWorkspace.name
+        }
         let newWs = monitor.activeWorkspace
         if let oldWsName = lastActiveWorkspacePerMonitor[monitor.rect.topLeftCorner] {
             let oldWs = Workspace.get(byName: oldWsName)
             if oldWs != newWs {
                 let direction: SlideDirection = newWs > oldWs ? .left : .right
                 transitions.append((monitor, oldWs, newWs, direction))
+                transitionedWorkspaceNames.insert(oldWsName)
             }
         }
         lastActiveWorkspacePerMonitor[monitor.rect.topLeftCorner] = newWs.name
@@ -226,11 +234,34 @@ private func layoutWorkspaces() async throws {
         try await workspace.layoutWorkspace()
     }
     for workspace in Workspace.all where !workspace.isVisible {
-        // Skip old workspace windows that were already animated off-screen
-        if transitions.contains(where: { $0.oldWs == workspace }) { continue }
+        if transitionedWorkspaceNames.contains(workspace.name) { continue }
         let corner = monitorToOptimalHideCorner[workspace.workspaceMonitor.rect.topLeftCorner] ?? .bottomRightCorner
         for window in workspace.allLeafWindowsRecursive {
             try await (window as! MacWindow).hideInCorner(corner) // todo as!
+        }
+    }
+
+    // Keep transitioned workspaces in the set until they become visible again.
+    // This prevents AX-notification-triggered layout calls from running
+    // hideInCorner on sliding windows during the animation.
+    transitionedWorkspaceNames = transitionedWorkspaceNames.filter { !Workspace.get(byName: $0).isVisible }
+
+    // After slide animations complete (~326ms spring), teleport off-screen windows to corner
+    // without animation. The window is off-screen during the teleport, so it's invisible.
+    if !transitions.isEmpty {
+        let corners = monitorToOptimalHideCorner
+        let oldNames = Set(transitions.map { $0.oldWs.name })
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            for name in oldNames {
+                let ws = Workspace.get(byName: name)
+                if ws.isVisible { continue }
+                let corner = corners[ws.workspaceMonitor.rect.topLeftCorner] ?? .bottomRightCorner
+                for window in ws.allLeafWindowsRecursive {
+                    guard let macWindow = window as? MacWindow else { continue }
+                    try? await macWindow.hideInCornerBlocking(corner)
+                }
+            }
         }
     }
 }

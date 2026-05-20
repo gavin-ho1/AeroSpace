@@ -120,33 +120,44 @@ final class MacWindow: Window {
     @MainActor
     func hideInCorner(_ corner: OptimalHideCorner) async throws {
         guard let nodeMonitor else { return }
-        // Don't accidentally override prevUnhiddenEmulationPosition in case of subsequent `hideInCorner` calls
+        try await saveUnhiddenPositionIfNeeded()
+        guard let p = try await cornerPosition(corner, monitor: nodeMonitor) else { return }
+        setAxFrame(p, nil)
+    }
+
+    @MainActor
+    func hideInCornerBlocking(_ corner: OptimalHideCorner) async throws {
+        guard let nodeMonitor else { return }
+        try await saveUnhiddenPositionIfNeeded()
+        guard let p = try await cornerPosition(corner, monitor: nodeMonitor) else { return }
+        try await setAxFrameBlocking(p, nil)
+    }
+
+    @MainActor
+    private func saveUnhiddenPositionIfNeeded() async throws {
         if !isHiddenInCorner {
             guard let windowRect = try await getAxRect() else { return }
-            // Check for isHiddenInCorner for the second time because of the suspension point above
             if !isHiddenInCorner {
                 let topLeftCorner = windowRect.topLeftCorner
-                let monitorRect = windowRect.center.monitorApproximation.rect // Similar to layoutFloatingWindow. Non idempotent
+                let monitorRect = windowRect.center.monitorApproximation.rect
                 let absolutePoint = topLeftCorner - monitorRect.topLeftCorner
                 prevUnhiddenProportionalPositionInsideWorkspaceRect =
                     CGPoint(x: absolutePoint.x / monitorRect.width, y: absolutePoint.y / monitorRect.height)
             }
         }
-        let p: CGPoint
+    }
+
+    @MainActor
+    private func cornerPosition(_ corner: OptimalHideCorner, monitor: Monitor) async throws -> CGPoint? {
         switch corner {
             case .bottomLeftCorner:
-                guard let s = try await getAxSize() else { fallthrough }
-                // Zoom will jump off if you do one pixel offset https://github.com/nikitabobko/AeroSpace/issues/527
-                // todo this ad hoc won't be necessary once I implement optimization suggested by Zalim
+                guard let s = try await getAxSize() else { return nil }
                 let onePixelOffset = macApp.appId == .zoom ? .zero : CGPoint(x: 1, y: -1)
-                p = nodeMonitor.visibleRect.bottomLeftCorner + onePixelOffset + CGPoint(x: -s.width, y: 0)
+                return monitor.visibleRect.bottomLeftCorner + onePixelOffset + CGPoint(x: -s.width, y: 0)
             case .bottomRightCorner:
-                // Zoom will jump off if you do one pixel offset https://github.com/nikitabobko/AeroSpace/issues/527
-                // todo this ad hoc won't be necessary once I implement optimization suggested by Zalim
                 let onePixelOffset = macApp.appId == .zoom ? .zero : CGPoint(x: 1, y: 1)
-                p = nodeMonitor.visibleRect.bottomRightCorner - onePixelOffset
+                return monitor.visibleRect.bottomRightCorner - onePixelOffset
         }
-        setAxFrame(p, nil)
     }
 
     @MainActor
@@ -210,8 +221,19 @@ final class MacWindow: Window {
                     CGPoint(x: absolutePoint.x / monitorRect.width, y: absolutePoint.y / monitorRect.height)
             }
         }
-        guard let windowRect = try await getAxRect() else { return }
+        let windowRect: Rect
+        if let lastRect = lastAppliedLayoutPhysicalRect {
+            windowRect = lastRect
+        } else if let axRect = try await getAxRect() {
+            windowRect = axRect
+        } else {
+            return
+        }
         let offScreen = slideOutPosition(for: windowRect, monitor: nodeMonitor, direction: direction)
+        if isHiddenInCorner, let lastRect = lastAppliedLayoutPhysicalRect {
+            unhideFromCorner()
+            try await setAxFrameBlocking(lastRect.topLeftCorner, lastRect.size)
+        }
         setAxFrame(offScreen, nil)
     }
 
