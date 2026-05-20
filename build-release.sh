@@ -45,7 +45,7 @@ xcodebuild-pretty .release/xcodebuild.log clean build \
     -derivedDataPath .xcode-build \
     CODE_SIGNING_ALLOWED=NO
 
-git checkout .
+# git checkout .
 
 cp -r ".xcode-build/Build/Products/$xcode_configuration/AeroSpace.app" .release
 cp -r .build/apple/Products/Release/aerospace .release
