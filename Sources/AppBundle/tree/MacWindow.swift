@@ -224,8 +224,15 @@ final class MacWindow: Window {
         let windowRect: Rect
         if let lastRect = lastAppliedLayoutPhysicalRect {
             windowRect = lastRect
+        } else if isFullscreen {
+            // Fullscreen windows have lastAppliedLayoutPhysicalRect = nil, so compute
+            // the expected fullscreen rect directly (same logic as layoutFullscreen).
+            let monitorRect = noOuterGapsInFullscreen
+                ? nodeMonitor.visibleRect
+                : nodeMonitor.visibleRectPaddedByOuterGaps
+            windowRect = monitorRect
         } else if isHiddenInCorner, let savedPos = prevUnhiddenProportionalPositionInsideWorkspaceRect {
-            let monitorRect = nodeMonitor.visibleRect
+            let monitorRect = nodeMonitor.rect
             let savedX = monitorRect.topLeftX + monitorRect.width * savedPos.x
             let savedY = monitorRect.topLeftY + monitorRect.height * savedPos.y
             let size = try? await getAxSize()
@@ -251,8 +258,15 @@ final class MacWindow: Window {
         let windowRect: Rect
         if let lastRect = lastAppliedLayoutPhysicalRect {
             windowRect = lastRect
+        } else if isFullscreen {
+            // Fullscreen windows have lastAppliedLayoutPhysicalRect = nil, so compute
+            // the expected fullscreen rect directly (same logic as layoutFullscreen).
+            let monitorRect = noOuterGapsInFullscreen
+                ? nodeMonitor.visibleRect
+                : nodeMonitor.visibleRectPaddedByOuterGaps
+            windowRect = monitorRect
         } else if isHiddenInCorner, let savedPos = prevUnhiddenProportionalPositionInsideWorkspaceRect {
-            let monitorRect = nodeMonitor.visibleRect
+            let monitorRect = nodeMonitor.rect
             let savedX = monitorRect.topLeftX + monitorRect.width * savedPos.x
             let savedY = monitorRect.topLeftY + monitorRect.height * savedPos.y
             let size = try? await getAxSize()
@@ -261,7 +275,7 @@ final class MacWindow: Window {
             windowRect = Rect(topLeftX: savedX, topLeftY: savedY, width: w, height: h)
         } else if let axRect = try await getAxRect() {
             if !isHiddenInCorner {
-                let monitorRect = nodeMonitor.visibleRect
+                let monitorRect = nodeMonitor.rect
                 let absolutePoint = axRect.topLeftCorner - monitorRect.topLeftCorner
                 prevUnhiddenProportionalPositionInsideWorkspaceRect =
                     CGPoint(x: absolutePoint.x / monitorRect.width, y: absolutePoint.y / monitorRect.height)
