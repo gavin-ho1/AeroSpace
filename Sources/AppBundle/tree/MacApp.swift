@@ -143,19 +143,28 @@ final class MacApp: AbstractApp {
         }
     }
 
-    @MainActor func setAxFrame(_ windowId: UInt32, _ topLeft: CGPoint?, _ size: CGSize?) {
+    @MainActor func setAxFrame(_ windowId: UInt32, _ topLeft: CGPoint?, _ size: CGSize?, from sourceRect: Rect? = nil) {
         if isStartup || windowId == currentlyManipulatedWithMouseWindowId {
             WindowAnimator.shared.cancelAnimation(for: windowId)
             setAxFrameInstant(windowId, topLeft, size)
             return
         }
-        WindowAnimator.shared.animate(windowId: windowId, app: self, targetTopLeft: topLeft, targetSize: size)
+        WindowAnimator.shared.animate(windowId: windowId, app: self, targetTopLeft: topLeft, targetSize: size, sourceRect: sourceRect)
     }
 
     func setAxFrameBlocking(_ windowId: UInt32, _ topLeft: CGPoint?, _ size: CGSize?) async throws {
         await MainActor.run {
             WindowAnimator.shared.cancelAnimation(for: windowId)
         }
+        setFrameJobs.removeValue(forKey: windowId)?.cancel()
+        try await withWindow(windowId) { [axApp] window, job in
+            try disableAnimations(app: axApp.threadGuarded, job) {
+                try setFrame(window, topLeft, size, job)
+            }
+        }
+    }
+
+    func setAxFrameBlockingForAnimation(_ windowId: UInt32, _ topLeft: CGPoint?, _ size: CGSize?) async throws {
         setFrameJobs.removeValue(forKey: windowId)?.cancel()
         try await withWindow(windowId) { [axApp] window, job in
             try disableAnimations(app: axApp.threadGuarded, job) {

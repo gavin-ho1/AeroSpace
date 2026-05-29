@@ -56,8 +56,8 @@ struct SpringConfig {
 
     static let niriWindowMovement = SpringConfig(
         dampingRatio: 1.0,
-        stiffness: 800.0,
-        epsilon: 0.0001,
+        stiffness: 900.0,
+        epsilon: 0.0005,
         velocityEpsilon: 0.01
     )
 

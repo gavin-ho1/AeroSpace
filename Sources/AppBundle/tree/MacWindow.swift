@@ -4,6 +4,7 @@ import Common
 final class MacWindow: Window {
     let macApp: MacApp
     private var prevUnhiddenProportionalPositionInsideWorkspaceRect: CGPoint?
+    private var preparedSlideInRect: Rect?
 
     @MainActor
     private init(_ id: UInt32, _ actor: MacApp, lastFloatingSize: CGSize?, parent: NonLeafTreeNodeObject, adaptiveWeight: CGFloat, index: Int) {
@@ -197,7 +198,9 @@ final class MacWindow: Window {
     }
 
     @MainActor override func setAxFrame(_ topLeft: CGPoint?, _ size: CGSize?) {
-        macApp.setAxFrame(windowId, topLeft, size)
+        let sourceRect = preparedSlideInRect
+        preparedSlideInRect = nil
+        macApp.setAxFrame(windowId, topLeft, size, from: sourceRect)
     }
 
     func setAxFrameBlocking(_ topLeft: CGPoint?, _ size: CGSize?) async throws {
@@ -249,7 +252,7 @@ final class MacWindow: Window {
             unhideFromCorner()
             try await setAxFrameBlocking(lastRect.topLeftCorner, lastRect.size)
         }
-        setAxFrame(offScreen, nil)
+        macApp.setAxFrame(windowId, offScreen, nil, from: windowRect)
     }
 
     @MainActor
@@ -286,6 +289,7 @@ final class MacWindow: Window {
         }
         let startPos = slideInStartPosition(for: windowRect, monitor: nodeMonitor, direction: direction)
         try await setAxFrameBlocking(startPos, nil)
+        preparedSlideInRect = Rect(topLeftX: startPos.x, topLeftY: startPos.y, width: windowRect.width, height: windowRect.height)
     }
 }
 
