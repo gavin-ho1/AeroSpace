@@ -246,13 +246,13 @@ private func layoutWorkspaces() async throws {
     // hideInCorner on sliding windows during the animation.
     transitionedWorkspaceNames = transitionedWorkspaceNames.filter { !Workspace.get(byName: $0).isVisible }
 
-    // After slide animation completes (~326ms spring), teleport off-screen windows to corner
+    // After slide animation completes, teleport off-screen windows to corner
     // without animation. The window is off-screen during the teleport, so it's invisible.
     if !transitions.isEmpty {
         let corners = monitorToOptimalHideCorner
         let oldNames = Set(transitions.map { $0.oldWs.name })
         Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 350_000_000)
+            try? await Task.sleep(nanoseconds: WindowAnimator.workspaceTransitionCleanupDelayNanoseconds)
             for name in oldNames {
                 let ws = Workspace.get(byName: name)
                 if ws.isVisible { continue }
