@@ -44,7 +44,7 @@ cd ./xcode
         -destination "generic/platform=macOS" \
         -configuration "$xcode_configuration" \
         -derivedDataPath .xcode-build \
-        CODE_SIGNING_ALLOWED=NO
+        CODE_SIGN_IDENTITY="$codesign_identity"
 cd -
 
 # git checkout .
@@ -56,7 +56,7 @@ cp -r .build/apple/Products/Release/aerospace .release
 ### SIGN CLI ###
 ################
 
-# codesign -s "$codesign_identity" .release/aerospace
+codesign -s "$codesign_identity" .release/aerospace
 
 ################
 ### VALIDATE ###
